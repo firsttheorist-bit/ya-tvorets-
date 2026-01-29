@@ -13,11 +13,9 @@ import {
   View,
 } from 'react-native';
 import { useAppLanguage } from '../LanguageContext';
+import type { AppLanguage, JournalMood } from '../mentorPhrases';
 
-type AppLanguage = 'ua' | 'en';
-
-type JournalMood = 'low' | 'neutral' | 'high';
-// поддерживаем твои + возможные “старые” источники из других частей приложения
+// поддерживаем твои + возможные "старые" источники из других частей приложения
 type JournalSource = 'manual' | 'challenge' | 'reflection' | 'bad_day' | 'win' | 'note' | 'system';
 
 interface JournalEntry {
@@ -35,7 +33,7 @@ interface JournalEntry {
 }
 
 const JOURNAL_KEY = '@ya_tvorets_journal_entries';
-// IMPORTANT: если у тебя другой “основной” ключ, где пишут reflection/bad_day/challenge — поменяй здесь
+// IMPORTANT: если у тебя другой "основной" ключ, где пишут reflection/bad_day/challenge — поменяй здесь
 const ALT_JOURNAL_KEY = '@ya_tvorets_journal_v1';
 
 function todayIso(): string {
@@ -55,7 +53,8 @@ function formatHumanDate(iso: string, lang: AppLanguage): string {
   return `${d}.${m}.${y}`;
 }
 
-function moodLabel(mood: JournalMood, lang: AppLanguage): string {
+// Функции перевода для поиска (не UI)
+function getMoodLabelForSearch(mood: JournalMood, lang: AppLanguage): string {
   if (lang === 'ua') {
     if (mood === 'low') return 'Важкий день';
     if (mood === 'neutral') return 'Звичайний день';
@@ -64,11 +63,6 @@ function moodLabel(mood: JournalMood, lang: AppLanguage): string {
   if (mood === 'low') return 'Hard day';
   if (mood === 'neutral') return 'Normal day';
   return 'Good day';
-}
-
-function moodChipLabel(mood: JournalMood | null, lang: AppLanguage): string {
-  if (mood === null) return lang === 'ua' ? 'Без позначки' : 'No label';
-  return moodLabel(mood, lang);
 }
 
 function isMood(v: unknown): v is JournalMood {
@@ -97,7 +91,7 @@ function parseList(raw: string | null): any[] {
   }
 }
 
-// Нормализация записей из разных схем (текущая + возможная “другая”)
+// Нормализация записей из разных схем (текущая + возможная "другая")
 function sanitizeEntry(anyEntry: any): JournalEntry | null {
   const id = String(anyEntry?.id ?? '').trim();
   const text = typeof anyEntry?.text === 'string' ? anyEntry.text : '';
@@ -160,15 +154,15 @@ function dedupeById(list: JournalEntry[]): JournalEntry[] {
       map.set(e.id, e);
       continue;
     }
-    // если дубликат — оставим более “новый” по времени
+    // если дубликат — оставим более "новый" по времени
     map.set(e.id, entryTimeMs(e) >= entryTimeMs(prev) ? e : prev);
   }
   return Array.from(map.values());
 }
 
 export default function JournalScreen() {
-  const { language } = useAppLanguage();
-  const lang: AppLanguage = (language as AppLanguage) === 'ua' ? 'ua' : 'en';
+  const { t, language } = useAppLanguage();
+  const lang: AppLanguage = language;
 
   const [loading, setLoading] = useState<boolean>(true);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -229,10 +223,8 @@ export default function JournalScreen() {
 
     if (!trimmed && !newMood) {
       Alert.alert(
-        lang === 'ua' ? 'Немає тексту' : 'No text',
-        lang === 'ua'
-          ? 'Напиши хоча б один рядок або обери настрій.'
-          : 'Write at least one line or choose a mood.'
+        t('common:noText', { defaultValue: 'No text' }),
+        t('journal:noTextWarning', { defaultValue: 'Write at least one line or choose a mood.' })
       );
       return;
     }
@@ -263,8 +255,8 @@ export default function JournalScreen() {
       setNewMood(null);
 
       Alert.alert(
-        lang === 'ua' ? 'Збережено' : 'Saved',
-        lang === 'ua' ? 'Запис додано до щоденника.' : 'Entry has been added to your journal.'
+        t('journal:saved'),
+        t('journal:entryAdded')
       );
     } catch (e) {
       console.log('Error adding journal entry', e);
@@ -275,12 +267,12 @@ export default function JournalScreen() {
 
   const handleDeleteEntry = (entry: JournalEntry) => {
     Alert.alert(
-      lang === 'ua' ? 'Видалити запис?' : 'Delete entry?',
-      lang === 'ua' ? 'Цю дію неможливо скасувати.' : 'This action cannot be undone.',
+      t('journal:deleteConfirm'),
+      t('journal:deleteWarning'),
       [
-        { text: lang === 'ua' ? 'Скасувати' : 'Cancel', style: 'cancel' },
+        { text: t('common:cancel'), style: 'cancel' },
         {
-          text: lang === 'ua' ? 'Видалити' : 'Delete',
+          text: t('common:delete'),
           style: 'destructive',
           onPress: () => void doDelete(entry.id),
         },
@@ -307,7 +299,7 @@ export default function JournalScreen() {
     const q = search.trim().toLowerCase();
     if (q.length > 0) {
       list = list.filter((e) => {
-        const moodStr = e.mood ? moodLabel(e.mood, lang) : '';
+        const moodStr = e.mood ? getMoodLabelForSearch(e.mood, lang) : '';
         const src = e.source ?? '';
         const hay = `${e.date} ${src} ${moodStr} ${e.title ?? ''} ${e.text ?? ''}`.toLowerCase();
         return hay.includes(q);
@@ -326,7 +318,7 @@ export default function JournalScreen() {
     let message = entry.text;
 
     if (entry.mood) {
-      const moodStr = moodLabel(entry.mood, lang);
+      const moodStr = t(`journal:${entry.mood}`);
       message = `${lang === 'ua' ? 'Настрій: ' : 'Mood: '}${moodStr}\n\n${entry.text}`;
     }
 
@@ -340,24 +332,24 @@ export default function JournalScreen() {
     try {
       if (entries.length === 0) {
         Alert.alert(
-          lang === 'ua' ? 'Немає записів' : 'No entries',
-          lang === 'ua' ? 'У щоденнику поки немає що експортувати.' : 'There is nothing to export yet.'
+          t('common:noEntries', { defaultValue: 'No entries' }),
+          t('journal:noEntriesExport', { defaultValue: 'There is nothing to export yet.' })
         );
         return;
       }
 
-      // JSON экспорт — ок, но иногда удобнее читать “человеческий” формат.
+      // JSON экспорт — ок, но иногда удобнее читать "человеческий" формат.
       const human = entries
         .slice(0, 500)
         .map((e) => {
-          const header = `${formatHumanDate(e.date, lang)}${e.mood ? ` • ${moodLabel(e.mood, lang)}` : ''}`;
+          const header = `${formatHumanDate(e.date, lang)}${e.mood ? ` • ${t(`journal:${e.mood}`)}` : ''}`;
           const title = e.title ? `\n${e.title}` : '';
           return `${header}${title}\n${e.text}`.trim();
         })
         .join('\n\n---\n\n');
 
       await Share.share({
-        title: lang === 'ua' ? 'Експорт щоденника' : 'Journal export',
+        title: t('journal:export'),
         message: human,
       });
     } catch (e) {
@@ -386,7 +378,7 @@ export default function JournalScreen() {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>
-          {lang === 'ua' ? 'Завантаження щоденника...' : 'Loading journal...'}
+          {t('journal:loading', { defaultValue: 'Loading journal...' })}
         </Text>
       </View>
     );
@@ -394,33 +386,29 @@ export default function JournalScreen() {
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.title}>{lang === 'ua' ? 'Щоденник' : 'Journal'}</Text>
+      <Text style={styles.title}>{t('journal:title')}</Text>
       <Text style={styles.subtitle}>
-        {lang === 'ua'
-          ? 'Місце, де ти чесно фіксуєш дні: хороші, звичайні й важкі.'
-          : 'A place to honestly record your days: good, normal, and hard.'}
+        {t('journal:subtitle')}
       </Text>
 
       {/* Блок для нового запису */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Новий запис' : 'New entry'}</Text>
+        <Text style={styles.sectionTitle}>{t('journal:newEntry')}</Text>
         <Text style={styles.mutedText}>
-          {lang === 'ua'
-            ? 'Можеш написати кілька речень або просто позначити настрій.'
-            : 'You can write a few sentences or just mark your mood.'}
+          {t('journal:newEntryHint', { defaultValue: 'You can write a few sentences or just mark your mood.' })}
         </Text>
 
         <TextInput
           value={newText}
           onChangeText={setNewText}
-          placeholder={lang === 'ua' ? 'Що сьогодні хочеш зафіксувати для себе?' : 'What do you want to register about today?'}
+          placeholder={t('journal:newEntryPlaceholder')}
           placeholderTextColor="#B0A493"
           style={styles.input}
           multiline
           textAlignVertical="top"
         />
 
-        <Text style={styles.moodSelectorLabel}>{lang === 'ua' ? 'Настрій запису' : 'Entry mood'}</Text>
+        <Text style={styles.moodSelectorLabel}>{t('journal:entryMood')}</Text>
 
         <View style={styles.moodChipsRow}>
           {(['low', 'neutral', 'high'] as JournalMood[]).map((mood) => (
@@ -430,7 +418,7 @@ export default function JournalScreen() {
               style={[styles.moodChip, newMood === mood && styles.moodChipActive]}
             >
               <Text style={[styles.moodChipText, newMood === mood && styles.moodChipTextActive]}>
-                {moodLabel(mood, lang)}
+                {t(`journal:${mood}`)}
               </Text>
             </Pressable>
           ))}
@@ -442,43 +430,39 @@ export default function JournalScreen() {
           style={({ pressed }) => [styles.primaryButton, pressed && { opacity: 0.9 }, saving && { opacity: 0.7 }]}
         >
           <Text style={styles.primaryButtonText}>
-            {saving ? (lang === 'ua' ? 'Збереження...' : 'Saving...') : lang === 'ua' ? 'Додати запис' : 'Add entry'}
+            {saving ? t('journal:saving') : t('journal:addEntry')}
           </Text>
         </Pressable>
       </View>
 
       {/* Коротка статистика по настрою */}
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Баланс настрою' : 'Mood balance'}</Text>
+        <Text style={styles.sectionTitle}>{t('journal:moodBalance')}</Text>
         {entries.length === 0 ? (
           <Text style={styles.mutedText}>
-            {lang === 'ua'
-              ? 'Ще немає записів. Перший запис — це вже спосіб не зникати з власного життя.'
-              : 'There are no entries yet. The first entry is already a way to not disappear from your own life.'}
+            {t('journal:noEntries')}
           </Text>
         ) : (
           <>
             <View style={styles.moodSummaryRow}>
               <View style={styles.moodSummaryItem}>
                 <View style={[styles.moodDot, styles.moodDotLow]} />
-                <Text style={styles.moodSummaryLabel}>{moodLabel('low', lang)}</Text>
+                <Text style={styles.moodSummaryLabel}>{t('journal:low')}</Text>
                 <Text style={styles.moodSummaryCount}>{moodSummary.low}</Text>
               </View>
               <View style={styles.moodSummaryItem}>
                 <View style={[styles.moodDot, styles.moodDotNeutral]} />
-                <Text style={styles.moodSummaryLabel}>{moodLabel('neutral', lang)}</Text>
+                <Text style={styles.moodSummaryLabel}>{t('journal:neutral')}</Text>
                 <Text style={styles.moodSummaryCount}>{moodSummary.neutral}</Text>
               </View>
               <View style={styles.moodSummaryItem}>
                 <View style={[styles.moodDot, styles.moodDotHigh]} />
-                <Text style={styles.moodSummaryLabel}>{moodLabel('high', lang)}</Text>
+                <Text style={styles.moodSummaryLabel}>{t('journal:high')}</Text>
                 <Text style={styles.moodSummaryCount}>{moodSummary.high}</Text>
               </View>
             </View>
             <Text style={styles.mutedText}>
-              {lang === 'ua'
-                ? 'Важливий не ідеальний графік настрою, а те, що ти помічаєш, як тобі було.'
-                : 'The goal is not a perfect mood chart, but noticing how you actually felt.'}
+              {t('journal:moodBalanceHint', { defaultValue: 'The goal is not a perfect mood chart, but noticing how you actually felt.' })}
             </Text>
           </>
         )}
@@ -487,7 +471,7 @@ export default function JournalScreen() {
       {/* Панель фільтрації + пошук + експорт */}
       <View style={styles.card}>
         <View style={styles.filterHeaderRow}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Записи' : 'Entries'}</Text>
+          <Text style={styles.sectionTitle}>{t('journal:entries')}</Text>
           <Pressable
             onPress={handleExport}
             disabled={exporting || entries.length === 0}
@@ -497,14 +481,14 @@ export default function JournalScreen() {
               (exporting || entries.length === 0) && { opacity: 0.6 },
             ]}
           >
-            <Text style={styles.exportButtonText}>{lang === 'ua' ? 'Експорт' : 'Export'}</Text>
+            <Text style={styles.exportButtonText}>{t('journal:export')}</Text>
           </Pressable>
         </View>
 
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder={lang === 'ua' ? 'Пошук за текстом, датою, тегом...' : 'Search by text, date, tag...'}
+          placeholder={t('journal:searchPlaceholder')}
           placeholderTextColor="#B0A493"
           style={styles.searchInput}
         />
@@ -514,10 +498,8 @@ export default function JournalScreen() {
             const active = filterMood === m;
             const label =
               m === 'all'
-                ? lang === 'ua'
-                  ? 'Усі'
-                  : 'All'
-                : moodChipLabel(m as JournalMood, lang);
+                ? t('journal:all')
+                : t(`journal:${m}`);
 
             return (
               <Pressable
@@ -533,9 +515,7 @@ export default function JournalScreen() {
 
         {filteredEntries.length === 0 ? (
           <Text style={styles.mutedText}>
-            {lang === 'ua'
-              ? 'Немає записів для обраного фільтра або пошуку.'
-              : 'There are no entries for the selected filter / search.'}
+            {t('journal:noEntriesFilter')}
           </Text>
         ) : (
           <View style={styles.entriesList}>
@@ -548,7 +528,7 @@ export default function JournalScreen() {
               >
                 <View style={styles.entryHeaderRow}>
                   <Text style={styles.entryDate}>{formatHumanDate(entry.date, lang)}</Text>
-                  {entry.mood && <Text style={styles.entryMoodBadge}>{moodLabel(entry.mood, lang)}</Text>}
+                  {entry.mood && <Text style={styles.entryMoodBadge}>{t(`journal:${entry.mood}`)}</Text>}
                 </View>
                 {entry.title ? (
                   <Text style={styles.entryTitle} numberOfLines={1}>
@@ -561,7 +541,7 @@ export default function JournalScreen() {
               </Pressable>
             ))}
             <Text style={styles.mutedText}>
-              {lang === 'ua' ? 'Порада: утримай запис, щоб видалити.' : 'Tip: long-press an entry to delete.'}
+              {t('journal:tip')}
             </Text>
           </View>
         )}
