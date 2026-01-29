@@ -22,5 +22,12 @@
   "import": "Import",
   "share": "Share",
   "close": "Close",
-  "open": "Open"
+  "open": "Open",
+  "noText": "No text",
+  "noEntries": "No entries",
+  "confirm": "Confirm",
+  "error": "Error",
+  "success": "Success",
+  "warning": "Warning",
+  "info": "Info"
 }
