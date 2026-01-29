@@ -3,6 +3,7 @@
   "subtitle": "A place to honestly record your days: good, normal, and hard.",
   "newEntry": "New entry",
   "newEntryPlaceholder": "What do you want to register about today?",
+  "newEntryHint": "You can write a few sentences or just mark your mood.",
   "entryMood": "Entry mood",
   "low": "Hard day",
   "neutral": "Normal day",
@@ -11,15 +12,19 @@
   "addEntry": "Add entry",
   "saving": "Saving...",
   "moodBalance": "Mood balance",
+  "moodBalanceHint": "The goal is not a perfect mood chart, but noticing how you actually felt.",
   "entries": "Entries",
   "searchPlaceholder": "Search by text, date, tag...",
   "all": "All",
   "export": "Export",
   "noEntries": "There are no entries yet.",
   "noEntriesFilter": "There are no entries for the selected filter / search.",
+  "noEntriesExport": "There is nothing to export yet.",
   "deleteConfirm": "Delete entry?",
   "deleteWarning": "This action cannot be undone.",
   "saved": "Saved",
   "entryAdded": "Entry has been added to your journal.",
-  "tip": "Tip: long-press an entry to delete."
+  "tip": "Tip: long-press an entry to delete.",
+  "noTextWarning": "Write at least one line or choose a mood.",
+  "loading": "Loading journal..."
 }
