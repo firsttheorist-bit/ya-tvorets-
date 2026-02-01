@@ -1,8 +1,6 @@
 // app/(tabs)/index.tsx
-import { useMentorTheme, mentorThemes } from '../design/mentorThemes';
-import { ThemedCard, ThemedButton, ThemedText } from '../design/components/ThemedComponents';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { todayLocalIso } from '../utils/date';
 
@@ -48,6 +46,8 @@ import {
 import { reconcileTodayXp, registerActionEvent, type DayActions } from '../storage/dayActionStore';
 import { appendChallengeJournalEntry, prependJournalEntry } from '../storage/journalStore';
 import { registerDailySuccess } from '../storage/xpStore';
+import { mentorThemes, useMentorTheme } from '../design/mentorThemes';
+import { getCurrentMentor } from '../storage/mentorStore';
 
 // ---------- Types ----------
 type JournalMood = 'low' | 'neutral' | 'high';
@@ -100,12 +100,12 @@ const TASK_TEXTS: Record<
     ua: [
       { title: 'Рефлексія дня', description: 'Що допомогло тобі трохи заспокоїтися сьогодні?' },
       { title: '3 рядки чесності', description: 'Що було ок / що забрало сили / що зробиш інакше завтра?' },
-      { title: 'Мʼяке питання', description: '“Що я можу зробити сьогодні, щоб підтримати себе?”' },
+      { title: 'Мʼяке питання', description: '"Що я можу зробити сьогодні, щоб підтримати себе?"' },
     ],
     en: [
       { title: 'Day reflection', description: 'What helped you calm down a little today?' },
       { title: '3 lines of honesty', description: 'Ok / drained / do differently tomorrow — 3 lines.' },
-      { title: 'Gentle question', description: '“What can I do today to support myself?”' },
+      { title: 'Gentle question', description: '"What can I do today to support myself?"' },
     ],
   },
   focus: {
@@ -174,7 +174,7 @@ function buildDefaultGoal(params: { lang: AppLanguage; growth: TraitKey | null }
   if (lang === 'ua') {
     if (growth === 'focus') return rand(['Одна справа до кінця, без перемикань.', '10 хв фокусу на одній дії.']);
     if (growth === 'calm') return rand(['Тримати повільний темп у дрібницях.', 'Зробити паузу перед реакцією.']);
-    if (growth === 'confidence') return rand(['Один крок, який трохи лякає — але реальний.', 'Сказати одне “так” собі.']);
+    if (growth === 'confidence') return rand(['Один крок, який трохи лякає — але реальний.', 'Сказати одне "так" собі.']);
     if (growth === 'discipline') return rand(['Одна дія за планом — без торгу.', 'Зробити мінімум і зарахувати.']);
     if (growth === 'creativity') return rand(['10 хв створення без оцінки.', 'Один маленький експеримент.']);
     if (growth === 'empathy') return rand(['Один теплий жест до себе.', 'Помітити почуття без критики.']);
@@ -184,7 +184,7 @@ function buildDefaultGoal(params: { lang: AppLanguage; growth: TraitKey | null }
 
   if (growth === 'focus') return rand(['One thing to completion. No switching.', '10 minutes of focus on one action.']);
   if (growth === 'calm') return rand(['Keep a slower pace in small things.', 'Pause before reacting.']);
-  if (growth === 'confidence') return rand(['One slightly scary but real step.', 'Say one “yes” to yourself.']);
+  if (growth === 'confidence') return rand(['One slightly scary but real step.', 'Say one "yes" to yourself.']);
   if (growth === 'discipline') return rand(['One planned action — no bargaining.', 'Do the minimum and count it.']);
   if (growth === 'creativity') return rand(['10 minutes of creating without judging.', 'One small experiment.']);
   if (growth === 'empathy') return rand(['One caring gesture to yourself.', 'Notice feelings without criticism.']);
@@ -196,7 +196,7 @@ function buildAutoEveningText(params: { lang: AppLanguage; goal: string; hasAnyA
   const goal = (params.goal ?? '').trim();
 
   if (params.lang === 'ua') {
-    const head = goal.length ? `Ціль дня: “${goal}”.` : 'Ціль дня: —';
+    const head = goal.length ? `Ціль дня: "${goal}".` : 'Ціль дня: —';
     const body = params.hasAnyAction
       ? 'Я зробив(ла) хоча б один крок. Це рахується.'
       : 'Сьогодні було важко. Але я зафіксував(ла) день.';
@@ -206,7 +206,7 @@ function buildAutoEveningText(params: { lang: AppLanguage; goal: string; hasAnyA
     return `${head}\n${body}\n${tail}`;
   }
 
-  const head = goal.length ? `Intention: “${goal}”.` : 'Intention: —';
+  const head = goal.length ? `Intention: "${goal}".` : 'Intention: —';
   const body = params.hasAnyAction ? 'I made at least one step. That counts.' : 'Today was heavy. But I closed the day.';
   const tail = goal.length ? 'Not perfect is fine. Direction matters more than judging.' : 'No judging. Just closing.';
   return `${head}\n${body}\n${tail}`;
@@ -246,7 +246,21 @@ export default function TodayScreen() {
   // NEW: busy state for inline challenge actions
   const [busyChallengeId, setBusyChallengeId] = useState<string | null>(null);
 
-  const mentor = (snapshot?.mentor ?? 'lev') as MentorId;
+  // Ментор из настроек (а не из снапшота)
+  const [currentMentor, setCurrentMentor] = useState<MentorId>('lev');
+  
+  // Получаем тему текущего ментора
+  const { colors: mentorColors } = useMentorTheme(currentMentor);
+
+  // Загружаем сохраненного ментора
+  useEffect(() => {
+    const loadMentor = async () => {
+      const mentor = await getCurrentMentor();
+      setCurrentMentor(mentor);
+    };
+    void loadMentor();
+  }, []);
+
   const gender = (snapshot?.gender ?? 'neutral') as AppGender;
   const mainGrowth: TraitKey | null = useMemo(() => snapshot?.mainGrowth ?? null, [snapshot]);
 
@@ -263,14 +277,14 @@ export default function TodayScreen() {
     if (fromSnap && fromSnap.trim().length) return fromSnap;
 
     return getMorningEntryLine({
-      mentor,
+      mentor: currentMentor, // Используем currentMentor вместо mentor из снапшота
       lang,
       growth: mainGrowth,
       mode: mentorMode,
       gender,
       name: displayName,
     });
-  }, [snapshot, mentor, lang, mainGrowth, mentorMode, gender, displayName]);
+  }, [snapshot, currentMentor, lang, mainGrowth, mentorMode, gender, displayName]);
 
   const morningHint = useMemo(() => getMorningEntryHint({ lang }), [lang]);
 
@@ -302,10 +316,10 @@ export default function TodayScreen() {
   const eveningQuestion = useMemo(() => {
     const g = (dayGoal ?? '').trim();
     if (g.length) {
-      return lang === 'ua' ? `Як вийшло з ціллю: “${g}”?` : `How did it go with: “${g}”?`;
+      return lang === 'ua' ? `Як вийшло з ціллю: "${g}"?` : `How did it go with: "${g}"?`;
     }
-    return getEveningReflectionQuestion({ mentor, lang, growth: mainGrowth });
-  }, [dayGoal, mentor, lang, mainGrowth]);
+    return getEveningReflectionQuestion({ mentor: currentMentor, lang, growth: mainGrowth });
+  }, [dayGoal, currentMentor, lang, mainGrowth]);
 
   const eveningPlaceholder = useMemo(() => {
     return lang === 'ua' ? 'Можеш лишити пустим — я заповню автоматично.' : 'You can leave it empty — I will auto-fill.';
@@ -516,8 +530,8 @@ export default function TodayScreen() {
     Alert.alert(
       lang === 'ua' ? 'Пропустити цей челендж?' : 'Skip this challenge for today?',
       lang === 'ua'
-        ? 'Можна чесно сказати “сьогодні це забагато”. Головне — не зникати із системи.'
-        : 'You can honestly say “this is too much today”. The point is not to disappear from your system.',
+        ? 'Можна чесно сказати "сьогодні це забагато". Головне — не зникати із системи.'
+        : 'You can honestly say "this is too much today". The point is not to disappear from your system.',
       [
         { text: lang === 'ua' ? 'Повернутися' : 'Go back', style: 'cancel' },
         { text: lang === 'ua' ? 'Пропустити' : 'Skip', onPress: () => void doSkipChallenge(ch) },
@@ -651,7 +665,7 @@ export default function TodayScreen() {
       setLastSuccessDate(recon.xp.lastSuccessDate);
 
       const mentorMsg = getEveningReflectionMentorLine({
-        mentor,
+        mentor: currentMentor, // Используем currentMentor
         lang,
         growth: mainGrowth,
         gender,
@@ -696,14 +710,14 @@ export default function TodayScreen() {
 
       const line = isQuiet
         ? getEveningQuietCloseLine({
-            mentor,
+            mentor: currentMentor, // Используем currentMentor
             lang,
             growth: mainGrowth,
             gender,
             name: displayName,
           })
         : getEveningReflectionMentorLine({
-            mentor,
+            mentor: currentMentor, // Используем currentMentor
             lang,
             growth: mainGrowth,
             gender,
@@ -711,7 +725,7 @@ export default function TodayScreen() {
           });
 
       const moodLine = getJournalMoodLine({
-        mentor,
+        mentor: currentMentor, // Используем currentMentor
         lang,
         mood: 'low' as JournalMood,
         gender,
@@ -745,8 +759,10 @@ export default function TodayScreen() {
 
   if (loading || langLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>{lang === 'ua' ? 'Завантаження...' : 'Loading...'}</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: mentorColors.background }]}>
+        <Text style={[styles.loadingText, { color: mentorColors.text3 }]}>
+          {lang === 'ua' ? 'Завантаження...' : 'Loading...'}
+        </Text>
       </View>
     );
   }
@@ -782,77 +798,137 @@ export default function TodayScreen() {
     (hasAnyActionToday || todayXpEarned > 0);
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={[styles.scroll, { backgroundColor: mentorColors.background }]} contentContainerStyle={styles.scrollContent}>
       {showMorning ? (
-        <View style={styles.morningCard}>
+        <View style={[
+          styles.morningCard,
+          {
+            backgroundColor: mentorColors.background3,
+            borderColor: mentorColors.secondary + '40',
+          }
+        ]}>
           <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Ранковий вхід' : 'Morning entry'}</Text>
-            <Pressable onPress={() => void regenerateGoal()} style={styles.smallOutline}>
-              <Text style={styles.smallOutlineText}>{lang === 'ua' ? 'Змінити ціль' : 'New goal'}</Text>
+            <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>
+              {lang === 'ua' ? 'Ранковий вхід' : 'Morning entry'}
+            </Text>
+            <Pressable onPress={() => void regenerateGoal()} style={[
+              styles.smallOutline,
+              { borderColor: mentorColors.secondary, backgroundColor: mentorColors.background2 }
+            ]}>
+              <Text style={[styles.smallOutlineText, { color: mentorColors.text2 }]}>
+                {lang === 'ua' ? 'Змінити ціль' : 'New goal'}
+              </Text>
             </Pressable>
           </View>
 
-          <Text style={styles.morningText}>{morningLine}</Text>
-          <Text style={styles.mutedText}>{morningHint}</Text>
+          <Text style={[styles.morningText, { color: mentorColors.text }]}>{morningLine}</Text>
+          <Text style={[styles.mutedText, { color: mentorColors.text3 }]}>{morningHint}</Text>
 
           {dayGoal.trim().length ? (
-            <View style={styles.goalBox}>
-              <Text style={styles.goalLabel}>{lang === 'ua' ? 'Ціль дня' : 'Intention'}</Text>
-              <Text style={styles.goalText}>{dayGoal}</Text>
-              {goalPulseLine ? <Text style={styles.goalPulse}>{goalPulseLine}</Text> : null}
+            <View style={[
+              styles.goalBox,
+              {
+                backgroundColor: mentorColors.background2,
+                borderColor: mentorColors.secondary + '40',
+              }
+            ]}>
+              <Text style={[styles.goalLabel, { color: mentorColors.text2 }]}>{lang === 'ua' ? 'Ціль дня' : 'Intention'}</Text>
+              <Text style={[styles.goalText, { color: mentorColors.text }]}>{dayGoal}</Text>
+              {goalPulseLine ? <Text style={[styles.goalPulse, { color: mentorColors.text2 }]}>{goalPulseLine}</Text> : null}
             </View>
           ) : null}
 
           <Pressable
             onPress={() => void openMorningStartPicker()}
-            style={({ pressed }) => [styles.primaryButtonSmall, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [
+              styles.primaryButtonSmall, 
+              pressed && { opacity: 0.9 },
+              { backgroundColor: mentorColors.primary }
+            ]}
           >
             <Text style={styles.primaryButtonSmallText}>{lang === 'ua' ? 'Почати день' : 'Start day'}</Text>
           </Pressable>
         </View>
       ) : null}
 
-      <Text style={styles.greetingText}>{lang === 'ua' ? `Привіт, ${displayName}` : `Hi, ${displayName}`}</Text>
-      <Text style={styles.title}>{lang === 'ua' ? 'Сьогодні' : 'Today'}</Text>
+      <Text style={[styles.greetingText, { color: mentorColors.text }]}>
+        {lang === 'ua' ? `Привіт, ${displayName}` : `Hi, ${displayName}`}
+      </Text>
+      <Text style={[styles.title, { color: mentorColors.text }]}>{lang === 'ua' ? 'Сьогодні' : 'Today'}</Text>
 
       {showGoalCardAfterMorning ? (
-        <View style={styles.goalCard}>
+        <View style={[
+          styles.goalCard,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
           <View style={styles.rowBetween}>
-            <Text style={styles.goalLabel}>{lang === 'ua' ? 'Ціль дня' : 'Intention'}</Text>
-            <Pressable onPress={() => void regenerateGoal()} style={styles.smallOutline}>
-              <Text style={styles.smallOutlineText}>{lang === 'ua' ? 'Змінити' : 'Change'}</Text>
+            <Text style={[styles.goalLabel, { color: mentorColors.text2 }]}>{lang === 'ua' ? 'Ціль дня' : 'Intention'}</Text>
+            <Pressable onPress={() => void regenerateGoal()} style={[
+              styles.smallOutline,
+              { borderColor: mentorColors.secondary, backgroundColor: mentorColors.background3 }
+            ]}>
+              <Text style={[styles.smallOutlineText, { color: mentorColors.text2 }]}>{lang === 'ua' ? 'Змінити' : 'Change'}</Text>
             </Pressable>
           </View>
-          <Text style={styles.goalText}>{dayGoal}</Text>
-          {goalPulseLine ? <Text style={styles.goalPulse}>{goalPulseLine}</Text> : null}
-          <Text style={styles.mutedText}>{lang === 'ua' ? `XP сьогодні: +${todayXpEarned}` : `XP today: +${todayXpEarned}`}</Text>
+          <Text style={[styles.goalText, { color: mentorColors.text }]}>{dayGoal}</Text>
+          {goalPulseLine ? <Text style={[styles.goalPulse, { color: mentorColors.text2 }]}>{goalPulseLine}</Text> : null}
+          <Text style={[styles.mutedText, { color: mentorColors.text3 }]}>
+            {lang === 'ua' ? `XP сьогодні: +${todayXpEarned}` : `XP today: +${todayXpEarned}`}
+          </Text>
         </View>
       ) : null}
 
       {showEveningLocked ? (
-        <View style={styles.softInfoCard}>
-          <Text style={styles.softInfoText}>
+        <View style={[
+          styles.softInfoCard,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
+          <Text style={[styles.softInfoText, { color: mentorColors.text2 }]}>
             {lang === 'ua'
               ? 'Вечірній вихід зʼявиться після одного маленького кроку. Навіть 1 хвилина — рахується.'
               : 'Evening exit unlocks after one small action. Even 1 minute counts.'}
           </Text>
 
-          <Pressable onPress={() => void handleQuickMicroStep()} style={({ pressed }) => [styles.softInfoButton, pressed && { opacity: 0.9 }]}>
+          <Pressable 
+            onPress={() => void handleQuickMicroStep()} 
+            style={({ pressed }) => [
+              styles.softInfoButton, 
+              pressed && { opacity: 0.9 },
+              { backgroundColor: mentorColors.primary }
+            ]}
+          >
             <Text style={styles.softInfoButtonText}>{lang === 'ua' ? 'Зробити мікро-крок' : 'Do a micro step'}</Text>
           </Pressable>
         </View>
       ) : null}
 
       {showChallengesSummary ? (
-        <View style={styles.card}>
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
           <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Челенджі дня' : 'Daily challenges'}</Text>
-            <Pressable onPress={() => router.push('/challenges')} style={styles.smallOutline}>
-              <Text style={styles.smallOutlineText}>{lang === 'ua' ? 'Відкрити' : 'Open'}</Text>
+            <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>
+              {lang === 'ua' ? 'Челенджі дня' : 'Daily challenges'}
+            </Text>
+            <Pressable onPress={() => router.push('/challenges')} style={[
+              styles.smallOutline,
+              { borderColor: mentorColors.secondary, backgroundColor: mentorColors.background3 }
+            ]}>
+              <Text style={[styles.smallOutlineText, { color: mentorColors.text2 }]}>{lang === 'ua' ? 'Відкрити' : 'Open'}</Text>
             </Pressable>
           </View>
 
-          <Text style={styles.lineText}>
+          <Text style={[styles.lineText, { color: mentorColors.text }]}>
             {lang === 'ua' ? 'Прогрес: ' : 'Progress: '}
             {dailyDone}/{DAILY_CHALLENGES_COUNT}
           </Text>
@@ -866,11 +942,17 @@ export default function TodayScreen() {
               const isBusy = busyChallengeId === ch.id;
 
               return (
-                <View key={ch.id} style={styles.challengeMiniCard}>
-                  <Text style={styles.challengeMiniTitle} numberOfLines={2}>
+                <View key={ch.id} style={[
+                  styles.challengeMiniCard,
+                  {
+                    backgroundColor: mentorColors.background3,
+                    borderColor: mentorColors.secondary + '40',
+                  }
+                ]}>
+                  <Text style={[styles.challengeMiniTitle, { color: mentorColors.text }]} numberOfLines={2}>
                     {title}
                   </Text>
-                  <Text style={styles.challengeMiniDesc} numberOfLines={3}>
+                  <Text style={[styles.challengeMiniDesc, { color: mentorColors.text2 }]} numberOfLines={3}>
                     {desc}
                   </Text>
 
@@ -882,6 +964,7 @@ export default function TodayScreen() {
                         styles.challengeMiniPrimary,
                         pressed && { opacity: 0.9 },
                         (!!busyChallengeId) && { opacity: 0.6 },
+                        { backgroundColor: mentorColors.primary }
                       ]}
                     >
                       <Text style={styles.challengeMiniPrimaryText}>
@@ -896,9 +979,12 @@ export default function TodayScreen() {
                         styles.challengeMiniSecondary,
                         pressed && { opacity: 0.9 },
                         (!!busyChallengeId) && { opacity: 0.6 },
+                        { borderColor: mentorColors.secondary, backgroundColor: mentorColors.background2 }
                       ]}
                     >
-                      <Text style={styles.challengeMiniSecondaryText}>{lang === 'ua' ? 'Пропустити' : 'Skip'}</Text>
+                      <Text style={[styles.challengeMiniSecondaryText, { color: mentorColors.text2 }]}>
+                        {lang === 'ua' ? 'Пропустити' : 'Skip'}
+                      </Text>
                     </Pressable>
                   </View>
                 </View>
@@ -909,27 +995,49 @@ export default function TodayScreen() {
       ) : null}
 
       {showHardDay ? (
-        <View style={styles.card}>
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
           {!badDayEditorOpen ? (
             <>
-              <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Важкий день?' : 'Hard day?'}</Text>
-              <Text style={styles.mutedText}>
+              <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>{lang === 'ua' ? 'Важкий день?' : 'Hard day?'}</Text>
+              <Text style={[styles.mutedText, { color: mentorColors.text3 }]}>
                 {lang === 'ua' ? 'Одна коротка нотатка — і день можна закрити.' : 'One short note — and you can close the day.'}
               </Text>
-              <Pressable onPress={() => setBadDayEditorOpen(true)} style={({ pressed }) => [styles.badDayButton, pressed && { opacity: 0.9 }]}>
-                <Text style={styles.badDayButtonText}>{lang === 'ua' ? 'Зафіксувати' : 'Mark it'}</Text>
+              <Pressable 
+                onPress={() => setBadDayEditorOpen(true)} 
+                style={({ pressed }) => [
+                  styles.badDayButton, 
+                  pressed && { opacity: 0.9 },
+                  { backgroundColor: mentorColors.error + '30' }
+                ]}
+              >
+                <Text style={[styles.badDayButtonText, { color: mentorColors.error }]}>
+                  {lang === 'ua' ? 'Зафіксувати' : 'Mark it'}
+                </Text>
               </Pressable>
             </>
           ) : (
             <>
-              <Text style={styles.mutedText}>{eveningQuestion}</Text>
+              <Text style={[styles.mutedText, { color: mentorColors.text3 }]}>{eveningQuestion}</Text>
 
               <TextInput
                 value={badDayText}
                 onChangeText={setBadDayText}
                 placeholder={lang === 'ua' ? '1–2 рядки або нічого' : '1–2 lines or nothing'}
-                placeholderTextColor="#B0A493"
-                style={styles.badDayInput}
+                placeholderTextColor={mentorColors.text3}
+                style={[
+                  styles.badDayInput,
+                  {
+                    borderColor: mentorColors.secondary,
+                    color: mentorColors.text,
+                    backgroundColor: mentorColors.background3
+                  }
+                ]}
                 multiline
                 textAlignVertical="top"
               />
@@ -937,7 +1045,12 @@ export default function TodayScreen() {
                 <Pressable
                   onPress={() => void handleSaveBadDay()}
                   disabled={savingBadDay}
-                  style={({ pressed }) => [styles.badDayPrimaryButton, pressed && { opacity: 0.9 }, savingBadDay && { opacity: 0.7 }]}
+                  style={({ pressed }) => [
+                    styles.badDayPrimaryButton, 
+                    pressed && { opacity: 0.9 }, 
+                    savingBadDay && { opacity: 0.7 },
+                    { backgroundColor: mentorColors.primary }
+                  ]}
                 >
                   <Text style={styles.badDayPrimaryButtonText}>
                     {savingBadDay
@@ -959,9 +1072,15 @@ export default function TodayScreen() {
                     setBadDayEditorOpen(false);
                     setBadDayText('');
                   }}
-                  style={({ pressed }) => [styles.badDaySecondaryButton, pressed && { opacity: 0.9 }]}
+                  style={({ pressed }) => [
+                    styles.badDaySecondaryButton, 
+                    pressed && { opacity: 0.9 },
+                    { borderColor: mentorColors.secondary, backgroundColor: mentorColors.background2 }
+                  ]}
                 >
-                  <Text style={styles.badDaySecondaryButtonText}>{lang === 'ua' ? 'Скасувати' : 'Cancel'}</Text>
+                  <Text style={[styles.badDaySecondaryButtonText, { color: mentorColors.text2 }]}>
+                    {lang === 'ua' ? 'Скасувати' : 'Cancel'}
+                  </Text>
                 </Pressable>
               </View>
             </>
@@ -970,16 +1089,30 @@ export default function TodayScreen() {
       ) : null}
 
       {showMentorNote ? (
-        <View style={styles.mentorCard}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Нотатка наставника' : "Mentor's note"}</Text>
-          <Text style={styles.mentorText}>{mentorLine}</Text>
+        <View style={[
+          styles.mentorCard,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
+          <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>
+            {lang === 'ua' ? 'Нотатка наставника' : "Mentor's note"}
+          </Text>
+          <Text style={[styles.mentorText, { color: mentorColors.text2 }]}>{mentorLine}</Text>
         </View>
       ) : null}
 
       {showFocus ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Фокус' : 'Focus'}</Text>
-          <Text style={styles.lineText}>
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
+          <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>{lang === 'ua' ? 'Фокус' : 'Focus'}</Text>
+          <Text style={[styles.lineText, { color: mentorColors.text }]}>
             {lang === 'ua' ? 'Зона росту: ' : 'Growth: '}
             {getTraitLabel(mainGrowth as TraitKey, lang)}
           </Text>
@@ -987,20 +1120,36 @@ export default function TodayScreen() {
       ) : null}
 
       {showTasks ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Кроки' : 'Steps'}</Text>
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
+          <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>{lang === 'ua' ? 'Кроки' : 'Steps'}</Text>
 
           <View style={{ gap: 8, marginTop: 8 }}>
             {tasks.map((t) => {
               if (t.completed) return null;
               const texts = getTaskText(t, lang);
               return (
-                <Pressable key={t.id} onPress={() => confirmCompleteTask(t.id)} style={styles.taskCard}>
+                <Pressable 
+                  key={t.id} 
+                  onPress={() => confirmCompleteTask(t.id)} 
+                  style={[
+                    styles.taskCard,
+                    {
+                      backgroundColor: mentorColors.background3,
+                      borderColor: mentorColors.secondary + '40',
+                    }
+                  ]}
+                >
                   <View style={styles.taskHeader}>
-                    <View style={styles.checkbox} />
-                    <Text style={styles.taskTitle}>{texts.title}</Text>
+                    <View style={[styles.checkbox, { borderColor: mentorColors.secondary }]} />
+                    <Text style={[styles.taskTitle, { color: mentorColors.text }]}>{texts.title}</Text>
                   </View>
-                  <Text style={styles.taskDescription}>{texts.description}</Text>
+                  <Text style={[styles.taskDescription, { color: mentorColors.text2 }]}>{texts.description}</Text>
                 </Pressable>
               );
             })}
@@ -1009,11 +1158,19 @@ export default function TodayScreen() {
       ) : null}
 
       {showEvening ? (
-        <View style={styles.eveningCard}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Вечірній вихід' : 'Evening exit'}</Text>
+        <View style={[
+          styles.eveningCard,
+          {
+            backgroundColor: mentorColors.info + '15',
+            borderColor: mentorColors.info + '40',
+          }
+        ]}>
+          <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>
+            {lang === 'ua' ? 'Вечірній вихід' : 'Evening exit'}
+          </Text>
 
-          <Text style={styles.eveningQuestion}>{eveningQuestion}</Text>
-          <Text style={styles.eveningHint}>
+          <Text style={[styles.eveningQuestion, { color: mentorColors.text }]}>{eveningQuestion}</Text>
+          <Text style={[styles.eveningHint, { color: mentorColors.text3 }]}>
             {lang === 'ua'
               ? 'Можеш нічого не писати — я згенерую коротке закриття.'
               : 'You can write nothing — I will generate a short close.'}
@@ -1023,8 +1180,15 @@ export default function TodayScreen() {
             value={eveningText}
             onChangeText={setEveningText}
             placeholder={eveningPlaceholder}
-            placeholderTextColor="#B0A493"
-            style={styles.eveningInput}
+            placeholderTextColor={mentorColors.text3}
+            style={[
+              styles.eveningInput,
+              {
+                borderColor: mentorColors.secondary,
+                color: mentorColors.text,
+                backgroundColor: mentorColors.background2
+              }
+            ]}
             multiline
             textAlignVertical="top"
           />
@@ -1032,7 +1196,12 @@ export default function TodayScreen() {
           <Pressable
             onPress={() => void handleEveningClose()}
             disabled={savingEvening}
-            style={({ pressed }) => [styles.primaryButtonSmall, pressed && { opacity: 0.9 }, savingEvening && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.primaryButtonSmall, 
+              pressed && { opacity: 0.9 }, 
+              savingEvening && { opacity: 0.7 },
+              { backgroundColor: mentorColors.primary }
+            ]}
           >
             <Text style={styles.primaryButtonSmallText}>
               {savingEvening ? (lang === 'ua' ? 'Збереження...' : 'Saving...') : lang === 'ua' ? 'Закрити' : 'Close'}
@@ -1042,165 +1211,151 @@ export default function TodayScreen() {
       ) : null}
 
       {showProgress ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>{lang === 'ua' ? 'Прогрес' : 'Progress'}</Text>
-          <Text style={styles.lineText}>
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: mentorColors.background2,
+            borderColor: mentorColors.secondary + '20',
+          }
+        ]}>
+          <Text style={[styles.sectionTitle, { color: mentorColors.text }]}>{lang === 'ua' ? 'Прогрес' : 'Progress'}</Text>
+          <Text style={[styles.lineText, { color: mentorColors.text }]}>
             {lang === 'ua' ? 'Рівень: ' : 'Level: '}
             {level}
           </Text>
-          <Text style={styles.lineText}>
+          <Text style={[styles.lineText, { color: mentorColors.text }]}>
             {lang === 'ua' ? 'XP: ' : 'XP: '}
             {xp}
           </Text>
-          <Text style={styles.lineText}>
+          <Text style={[styles.lineText, { color: mentorColors.text }]}>
             {lang === 'ua' ? 'Серія: ' : 'Streak: '}
             {streak}
           </Text>
-          <Text style={styles.mutedText}>{lang === 'ua' ? `XP сьогодні: +${todayXpEarned}` : `XP today: +${todayXpEarned}`}</Text>
+          <Text style={[styles.mutedText, { color: mentorColors.text3 }]}>
+            {lang === 'ua' ? `XP сьогодні: +${todayXpEarned}` : `XP today: +${todayXpEarned}`}
+          </Text>
         </View>
       ) : null}
     </ScrollView>
   );
 }
 
-// styles — без изменений (оставь как у тебя) + добавил мини-стили для интерактива челенджей
+// Стили остаются без изменений в структуре, но цвета будут заменяться динамически через mentorColors
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#F3F0E8' },
+  scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 24 },
 
-  loadingContainer: { flex: 1, backgroundColor: '#F3F0E8', alignItems: 'center', justifyContent: 'center' },
-  loadingText: { fontSize: 16, color: '#7C7365' },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingText: { fontSize: 16 },
 
-  greetingText: { fontSize: 18, fontWeight: '600', color: '#2B2620', marginBottom: 2 },
-  title: { fontSize: 24, fontWeight: '700', color: '#2B2620', marginBottom: 10 },
+  greetingText: { fontSize: 18, fontWeight: '600', marginBottom: 2 },
+  title: { fontSize: 24, fontWeight: '700', marginBottom: 10 },
 
   card: {
-    backgroundColor: '#FFFEFA',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E1D6C5',
   },
 
   morningCard: {
-    backgroundColor: '#FFF6E6',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E7CFA2',
   },
-  morningText: { fontSize: 13, color: '#2B2620', marginBottom: 6 },
+  morningText: { fontSize: 13, marginBottom: 6 },
 
   goalCard: {
-    backgroundColor: '#FFFEFA',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E1D6C5',
   },
   goalBox: {
     marginTop: 8,
     borderRadius: 14,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#E7CFA2',
-    backgroundColor: '#FFFEFA',
   },
-  goalLabel: { fontSize: 11, color: '#7C7365', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
-  goalText: { fontSize: 13, color: '#2B2620', fontWeight: '600' },
-  goalPulse: { marginTop: 6, fontSize: 12, color: '#6C6255' },
+  goalLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  goalText: { fontSize: 13, fontWeight: '600' },
+  goalPulse: { marginTop: 6, fontSize: 12 },
 
   softInfoCard: {
-    backgroundColor: '#FFFEFA',
     borderRadius: 14,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E1D6C5',
   },
-  softInfoText: { fontSize: 12, color: '#6C6255' },
+  softInfoText: { fontSize: 12 },
   softInfoButton: {
     alignSelf: 'flex-start',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#2B2620',
     marginTop: 10,
   },
   softInfoButtonText: { fontSize: 12, color: '#FFF7E8', fontWeight: '600' },
 
   eveningCard: {
-    backgroundColor: '#EEF2FF',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#C8D0FF',
   },
-  eveningQuestion: { fontSize: 13, color: '#2B2620', marginBottom: 6, fontWeight: '600' },
-  eveningHint: { fontSize: 12, color: '#6C6255', marginBottom: 8 },
+  eveningQuestion: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
+  eveningHint: { fontSize: 12, marginBottom: 8 },
   eveningInput: {
     marginTop: 2,
     borderWidth: 1,
-    borderColor: '#D9CCB8',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#2B2620',
     minHeight: 80,
-    backgroundColor: '#FFFEFA',
   },
 
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: '#2B2620', marginBottom: 6 },
-  lineText: { fontSize: 13, color: '#4E4537', marginBottom: 4 },
-  mutedText: { fontSize: 13, color: '#9B8F7C', marginBottom: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 6 },
+  lineText: { fontSize: 13, marginBottom: 4 },
+  mutedText: { fontSize: 13, marginBottom: 4 },
 
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
 
   smallOutline: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#D9CCB8',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#F7F2E7',
   },
-  smallOutlineText: { fontSize: 12, color: '#6C6255', fontWeight: '600' },
+  smallOutlineText: { fontSize: 12, fontWeight: '600' },
 
   primaryButtonSmall: {
     alignSelf: 'flex-start',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#2B2620',
     marginTop: 10,
   },
   primaryButtonSmallText: { fontSize: 12, color: '#FFF7E8', fontWeight: '600' },
 
   challengeMiniCard: {
-    backgroundColor: '#F8F2DE',
     borderRadius: 14,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#D6C28A',
   },
-  challengeMiniCardSkipped: { backgroundColor: '#EFE9E1', borderColor: '#D9CCB8' },
-  challengeMiniTitle: { fontSize: 13, color: '#2B2620', fontWeight: '600', marginBottom: 4 },
-  challengeMiniStatus: { fontSize: 12, color: '#7C7365' },
+  challengeMiniCardSkipped: { borderColor: '#D9CCB8' },
+  challengeMiniTitle: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
+  challengeMiniStatus: { fontSize: 12 },
 
   // NEW: challenge mini description + actions
-  challengeMiniDesc: { fontSize: 12, color: '#4E4537' },
+  challengeMiniDesc: { fontSize: 12 },
   challengeMiniActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
 
   challengeMiniPrimary: {
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#2B2620',
   },
   challengeMiniPrimaryText: { fontSize: 12, color: '#FFF7E8', fontWeight: '600' },
 
@@ -1208,33 +1363,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#F7F2E7',
     borderWidth: 1,
-    borderColor: '#D9CCB8',
   },
-  challengeMiniSecondaryText: { fontSize: 12, color: '#6C6255', fontWeight: '600' },
+  challengeMiniSecondaryText: { fontSize: 12, fontWeight: '600' },
 
   mentorCard: {
-    backgroundColor: '#FFFEFA',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E1D6C5',
   },
-  mentorText: { fontSize: 13, color: '#4E4537' },
+  mentorText: { fontSize: 13 },
 
   taskCard: {
-    backgroundColor: '#F8F2DE',
     borderRadius: 14,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#D6C28A',
   },
   taskHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: '#C9A14A', marginRight: 8 },
-  taskTitle: { fontSize: 14, fontWeight: '700', color: '#2B2620' },
-  taskDescription: { fontSize: 13, color: '#4E4537' },
+  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, marginRight: 8 },
+  taskTitle: { fontSize: 14, fontWeight: '700' },
+  taskDescription: { fontSize: 13 },
 
   badDayButton: {
     marginTop: 8,
@@ -1242,32 +1391,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: '#E4C4C4',
   },
-  badDayButtonText: { fontSize: 13, color: '#5C2A2A', fontWeight: '600' },
+  badDayButtonText: { fontSize: 13, fontWeight: '600' },
 
   badDayInput: {
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#D9CCB8',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#2B2620',
     minHeight: 80,
-    backgroundColor: '#FFFEFA',
   },
   badDayButtonsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 },
-  badDayPrimaryButton: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#2B2620' },
+  badDayPrimaryButton: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 },
   badDayPrimaryButtonText: { fontSize: 13, color: '#FFF7E8', fontWeight: '600' },
   badDaySecondaryButton: {
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: '#F7F2E7',
     borderWidth: 1,
-    borderColor: '#D9CCB8',
   },
-  badDaySecondaryButtonText: { fontSize: 13, color: '#6C6255', fontWeight: '600' },
+  badDaySecondaryButtonText: { fontSize: 13, fontWeight: '600' },
 });
