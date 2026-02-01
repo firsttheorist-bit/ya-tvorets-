@@ -1,4 +1,6 @@
 // app/(tabs)/index.tsx
+import { useMentorTheme, mentorThemes } from '../design/mentorThemes';
+import { ThemedCard, ThemedButton, ThemedText } from '../design/components/ThemedComponents';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
